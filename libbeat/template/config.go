@@ -34,6 +34,7 @@ type TemplateConfig struct {
 	Overwrite    bool             `config:"overwrite"`
 	Settings     TemplateSettings `config:"settings"`
 	Order        int              `config:"order"`
+	Priority     int              `config:"priority"`
 }
 
 // TemplateSettings are part of the Elasticsearch template and hold index and source specific information.
@@ -45,8 +46,9 @@ type TemplateSettings struct {
 // DefaultConfig for index template
 func DefaultConfig() TemplateConfig {
 	return TemplateConfig{
-		Enabled: true,
-		Fields:  "",
-		Order:   1,
+		Enabled:  true,
+		Fields:   "",
+		Order:    1,
+		Priority: 100,
 	}
 }

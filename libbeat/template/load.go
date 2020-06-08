@@ -34,13 +34,17 @@ import (
 //Loader interface for loading templates
 type Loader interface {
 	Load(config TemplateConfig, info beat.Info, fields []byte, migration bool) error
+	//LoadComponent(config TemplateConfig, info beat.Info, fields []byte, migration bool) error
+	//LoadIndexTemplate(config TemplateConfig, info beat.Info, fields []byte, migration bool) error
+	//LoadDeprecatedTemplate(config TemplateConfig, info beat.Info, fields []byte, migration bool) error
 }
 
 // ESLoader implements Loader interface for loading templates to Elasticsearch.
 type ESLoader struct {
-	client  ESClient
-	builder *templateBuilder
-	log     *logp.Logger
+	client          ESClient
+	builder         *templateBuilder
+	legacyTemplates bool
+	log             *logp.Logger
 }
 
 // ESClient is a subset of the Elasticsearch client API capable of
@@ -67,9 +71,17 @@ type templateBuilder struct {
 	log *logp.Logger
 }
 
+//TODO(simitt): are index templates and data streams supported by 7.8 or 7.9, or 7.x?
+var minESVersionIndexTemplate = common.MustNewVersion("7.9.0")
+
 // NewESLoader creates a new template loader for ES
 func NewESLoader(client ESClient) *ESLoader {
-	return &ESLoader{client: client, builder: newTemplateBuilder(), log: logp.NewLogger("template_loader")}
+	version := client.GetVersion()
+	return &ESLoader{
+		client:          client,
+		legacyTemplates: version.LessThan(minESVersionIndexTemplate),
+		builder:         newTemplateBuilder(),
+		log:             logp.NewLogger("template_loader")}
 }
 
 // NewFileLoader creates a new template loader for the given file.
@@ -81,7 +93,7 @@ func newTemplateBuilder() *templateBuilder {
 	return &templateBuilder{log: logp.NewLogger("template")}
 }
 
-// Load checks if the index mapping template should be loaded
+// LoadDeprecatedTemplate checks if the index mapping template should be loaded
 // In case the template is not already loaded or overwriting is enabled, the
 // template is built and written to index
 func (l *ESLoader) Load(config TemplateConfig, info beat.Info, fields []byte, migration bool) error {
@@ -114,13 +126,33 @@ func (l *ESLoader) Load(config TemplateConfig, info beat.Info, fields []byte, mi
 	return nil
 }
 
+const (
+	indexTemplatePath = "/_index_template/"
+	templateKey       = "template"
+)
+
 // loadTemplate loads a template into Elasticsearch overwriting the existing
 // template if it exists. If you wish to not overwrite an existing template
 // then use CheckTemplate prior to calling this method.
 func (l *ESLoader) loadTemplate(templateName string, template map[string]interface{}) error {
 	l.log.Infof("Try loading template %s to Elasticsearch", templateName)
-	path := "/_template/" + templateName
 	params := esVersionParams(l.client.GetVersion())
+	var path string
+	if l.legacyTemplates {
+		path = "/_template/" + templateName
+		delete(template, "priority")
+	} else {
+		path = indexTemplatePath + templateName
+		delete(template, "order")
+		templateInfo := map[string]interface{}{}
+		for _, key := range []string{"settings", "mappings", "aliases"} {
+			if val, ok := template[key]; ok {
+				templateInfo[key] = val
+				delete(template, key)
+			}
+		}
+		template[templateKey] = templateInfo
+	}
 	status, body, err := l.client.Request("PUT", path, "", params, template)
 	if err != nil {
 		return fmt.Errorf("couldn't load template: %v. Response body: %s", err, body)
@@ -137,10 +169,12 @@ func (l *ESLoader) templateExists(templateName string) bool {
 	if l.client == nil {
 		return false
 	}
-
-	status, body, _ := l.client.Request("GET", "/_cat/templates/"+templateName, "", nil, nil)
-
-	return status == http.StatusOK && strings.Contains(string(body), templateName)
+	if l.legacyTemplates {
+		status, body, _ := l.client.Request("GET", "/_cat/templates/"+templateName, "", nil, nil)
+		return status == http.StatusOK && strings.Contains(string(body), templateName)
+	}
+	status, _, _ := l.client.Request("GET", indexTemplatePath+templateName, "", nil, nil)
+	return status == http.StatusOK
 }
 
 // Load reads the template from the config, creates the template body and prints it to the configured file.
