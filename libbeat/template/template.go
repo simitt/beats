@@ -30,6 +30,17 @@ import (
 	"github.com/elastic/beats/v7/libbeat/mapping"
 )
 
+const (
+	aliasesKey       = "aliases"
+	composedOfKey    = "composed_of"
+	dataStreamKey    = "data_stream"
+	indexPatternsKey = "index_patterns"
+	mappingsKey      = "mappings"
+	orderKey         = "order"
+	priorityKey      = "priority"
+	settingsKey      = "settings"
+)
+
 var (
 	// Defaults used in the template
 	defaultDateDetection         = false
@@ -53,6 +64,7 @@ type Template struct {
 	config      TemplateConfig
 	migration   bool
 	order       int
+	priority    int
 }
 
 // New creates a new template instance
@@ -98,23 +110,25 @@ func New(
 		Timestamp: time.Now(),
 	}
 
-	nameFormatter, err := fmtstr.CompileEvent(name)
-	if err != nil {
-		return nil, err
-	}
-	name, err = nameFormatter.Run(event)
+	name, err = formatStr(event, name)
 	if err != nil {
 		return nil, err
 	}
 
-	patternFormatter, err := fmtstr.CompileEvent(pattern)
+	pattern, err = formatStr(event, pattern)
 	if err != nil {
 		return nil, err
 	}
-	pattern, err = patternFormatter.Run(event)
-	if err != nil {
-		return nil, err
+
+	var composedOf []string
+	for _, c := range config.ComposedOf {
+		fmtd, err := formatStr(event, c)
+		if err != nil {
+			return nil, err
+		}
+		composedOf = append(composedOf, fmtd)
 	}
+	config.ComposedOf = composedOf
 
 	// In case no esVersion is set, it is assumed the same as beat version
 	if !esVersion.IsValid() {
@@ -130,7 +144,16 @@ func New(
 		config:      config,
 		migration:   migration,
 		order:       config.Order,
+		priority:    config.Priority,
 	}, nil
+}
+
+func formatStr(event *beat.Event, toCompile string) (string, error) {
+	fmt, err := fmtstr.CompileEvent(toCompile)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Run(event)
 }
 
 func (t *Template) load(fields mapping.Fields) (common.MapStr, error) {
@@ -183,19 +206,17 @@ func (t *Template) LoadBytes(data []byte) (common.MapStr, error) {
 
 // LoadMinimal loads the template only with the given configuration
 func (t *Template) LoadMinimal() (common.MapStr, error) {
-	keyPattern, patterns := buildPatternSettings(t.esVersion, t.GetPattern())
-	m := common.MapStr{
-		keyPattern: patterns,
-		"order":    t.order,
-		"settings": common.MapStr{
+	m := t.baseSettings()
+	if t.config.Settings.Index != nil {
+		m[settingsKey] = common.MapStr{
 			"index": t.config.Settings.Index,
-		},
+		}
 	}
 	if t.config.Settings.Source != nil {
-		m["mappings"] = buildMappings(
+		m[mappingsKey] = buildMappings(
 			t.beatVersion, t.esVersion, t.beatName,
 			nil, nil,
-			common.MapStr(t.config.Settings.Source))
+			t.config.Settings.Source)
 	}
 	return m, nil
 }
@@ -213,29 +234,42 @@ func (t *Template) GetPattern() string {
 // Generate generates the full template
 // The default values are taken from the default variable.
 func (t *Template) Generate(properties common.MapStr, dynamicTemplates []common.MapStr) common.MapStr {
-	keyPattern, patterns := buildPatternSettings(t.esVersion, t.GetPattern())
-	return common.MapStr{
-		keyPattern: patterns,
-		"order":    t.order,
-		"mappings": buildMappings(
-			t.beatVersion, t.esVersion, t.beatName,
-			properties,
-			append(dynamicTemplates, buildDynTmpl(t.esVersion)),
-			common.MapStr(t.config.Settings.Source)),
-		"settings": common.MapStr{
-			"index": buildIdxSettings(
-				t.esVersion,
-				t.config.Settings.Index,
-			),
-		},
+	m := t.baseSettings()
+	m[mappingsKey] = buildMappings(
+		t.beatVersion, t.esVersion, t.beatName,
+		properties,
+		append(dynamicTemplates, buildDynTmpl(t.esVersion)),
+		common.MapStr(t.config.Settings.Source))
+	m[settingsKey] = common.MapStr{
+		"index": buildIdxSettings(
+			t.esVersion,
+			t.config.Settings.Index,
+		),
 	}
+	return m
+}
+
+func (t *Template) baseSettings() common.MapStr {
+	keyPattern, patterns := buildPatternSettings(t.esVersion, t.GetPattern())
+	m := common.MapStr{
+		keyPattern:  patterns,
+		orderKey:    t.order,
+		priorityKey: t.priority,
+	}
+	if len(t.config.ComposedOf) > 0 {
+		m[composedOfKey] = t.config.ComposedOf
+	}
+	if t.config.DataStream != nil {
+		m[dataStreamKey] = t.config.DataStream
+	}
+	return m
 }
 
 func buildPatternSettings(ver common.Version, pattern string) (string, interface{}) {
 	if ver.Major < 6 {
 		return "template", pattern
 	}
-	return "index_patterns", []string{pattern}
+	return indexPatternsKey, []string{pattern}
 }
 
 func buildMappings(

@@ -17,7 +17,11 @@
 
 package template
 
-import "github.com/elastic/beats/v7/libbeat/mapping"
+import (
+	"strings"
+
+	"github.com/elastic/beats/v7/libbeat/mapping"
+)
 
 // TemplateConfig holds config information about the Elasticsearch template
 type TemplateConfig struct {
@@ -30,10 +34,14 @@ type TemplateConfig struct {
 		Path    string `config:"path"`
 		Name    string `config:"name"`
 	} `config:"json"`
-	AppendFields mapping.Fields   `config:"append_fields"`
-	Overwrite    bool             `config:"overwrite"`
-	Settings     TemplateSettings `config:"settings"`
-	Order        int              `config:"order"`
+	AppendFields mapping.Fields    `config:"append_fields"`
+	Overwrite    bool              `config:"overwrite"`
+	Settings     TemplateSettings  `config:"settings"`
+	Order        int               `config:"order"`
+	Priority     int               `config:"priority"`
+	Kind         Kind              `config:"kind"` // index or legacy (default: legacy)
+	ComposedOf   []string          `config:"-"`
+	DataStream   map[string]string `config:"-"`
 }
 
 // TemplateSettings are part of the Elasticsearch template and hold index and source specific information.
@@ -42,11 +50,40 @@ type TemplateSettings struct {
 	Source map[string]interface{} `config:"_source"`
 }
 
-// DefaultConfig for index template
+// Kind is used for enumerating the template kind that should be loaded.
+// TODO(simitt): stringify
+type Kind uint8
+
+//go:generate stringer -type Kind -trimprefix Kind
+const (
+	KindLegacy Kind = iota
+	KindIndex
+	KindComponent
+)
+
+//Unpack creates enumeration values for template kind
+func (k *Kind) Unpack(in string) error {
+	in = strings.ToLower(in)
+	switch in {
+	case "legacy":
+		*k = KindLegacy
+	case "component":
+		*k = KindComponent
+	case "index":
+		*k = KindIndex
+	default:
+		*k = KindLegacy
+	}
+	return nil
+}
+
+// DefaultConfig for template
 func DefaultConfig() TemplateConfig {
 	return TemplateConfig{
-		Enabled: true,
-		Fields:  "",
-		Order:   1,
+		Enabled:  true,
+		Fields:   "",
+		Order:    1,
+		Priority: 150,
+		Kind:     KindLegacy,
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//TODO(simitt): add tests for component and index template
 func TestFileLoader_Load(t *testing.T) {
 	ver := "7.0.0"
 	prefix := "mock"
@@ -42,8 +43,7 @@ func TestFileLoader_Load(t *testing.T) {
 		"load minimal config info": {
 			body: common.MapStr{
 				"index_patterns": []string{"mock-7.0.0-*"},
-				"order":          order,
-				"settings":       common.MapStr{"index": nil}},
+				"order":          order},
 		},
 		"load minimal config with index settings": {
 			settings: TemplateSettings{Index: common.MapStr{"code": "best_compression"}},
@@ -57,7 +57,6 @@ func TestFileLoader_Load(t *testing.T) {
 			body: common.MapStr{
 				"index_patterns": []string{"mock-7.0.0-*"},
 				"order":          order,
-				"settings":       common.MapStr{"index": nil},
 				"mappings": common.MapStr{
 					"_source":           common.MapStr{"enabled": false},
 					"_meta":             common.MapStr{"beat": prefix, "version": ver},

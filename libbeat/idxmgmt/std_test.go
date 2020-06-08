@@ -505,6 +505,11 @@ func newMockClientHandler() *mockClientHandler {
 	return &mockClientHandler{}
 }
 
+func (h *mockClientHandler) SupportsDataStream() bool {
+	//TODO(simitt): implement
+	return true
+}
+
 func (h *mockClientHandler) Load(config template.TemplateConfig, _ beat.Info, fields []byte, migration bool) error {
 	h.recordOp(mockCreateTemplate)
 	h.tmplForce = config.Overwrite
