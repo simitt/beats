@@ -35,6 +35,7 @@ type TemplateConfig struct {
 	Settings     TemplateSettings `config:"settings"`
 	Order        int              `config:"order"`
 	Priority     int              `config:"priority"`
+	Legacy       bool             `config:"legacy"`
 }
 
 // TemplateSettings are part of the Elasticsearch template and hold index and source specific information.
@@ -50,5 +51,6 @@ func DefaultConfig() TemplateConfig {
 		Fields:   "",
 		Order:    1,
 		Priority: 100,
+		Legacy:   false,
 	}
 }

@@ -195,7 +195,7 @@ func (t *Template) LoadMinimal() (common.MapStr, error) {
 		m["mappings"] = buildMappings(
 			t.beatVersion, t.esVersion, t.beatName,
 			nil, nil,
-			common.MapStr(t.config.Settings.Source))
+			t.config.Settings.Source)
 	}
 	return m, nil
 }

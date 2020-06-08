@@ -41,10 +41,10 @@ type Loader interface {
 
 // ESLoader implements Loader interface for loading templates to Elasticsearch.
 type ESLoader struct {
-	client          ESClient
-	builder         *templateBuilder
-	legacyTemplates bool
-	log             *logp.Logger
+	client    ESClient
+	builder   *templateBuilder
+	legacyAPI bool
+	log       *logp.Logger
 }
 
 // ESClient is a subset of the Elasticsearch client API capable of
@@ -78,10 +78,10 @@ var minESVersionIndexTemplate = common.MustNewVersion("7.9.0")
 func NewESLoader(client ESClient) *ESLoader {
 	version := client.GetVersion()
 	return &ESLoader{
-		client:          client,
-		legacyTemplates: version.LessThan(minESVersionIndexTemplate),
-		builder:         newTemplateBuilder(),
-		log:             logp.NewLogger("template_loader")}
+		client:    client,
+		legacyAPI: version.LessThan(minESVersionIndexTemplate),
+		builder:   newTemplateBuilder(),
+		log:       logp.NewLogger("template_loader")}
 }
 
 // NewFileLoader creates a new template loader for the given file.
@@ -109,7 +109,7 @@ func (l *ESLoader) Load(config TemplateConfig, info beat.Info, fields []byte, mi
 		templateName = config.JSON.Name
 	}
 
-	if l.templateExists(templateName) && !config.Overwrite {
+	if l.templateExists(templateName, config.Legacy) && !config.Overwrite {
 		l.log.Infof("Template %s already exists and will not be overwritten.", templateName)
 		return nil
 	}
@@ -119,7 +119,7 @@ func (l *ESLoader) Load(config TemplateConfig, info beat.Info, fields []byte, mi
 	if err != nil {
 		return err
 	}
-	if err := l.loadTemplate(templateName, body); err != nil {
+	if err := l.loadTemplate(templateName, config.Legacy, body); err != nil {
 		return fmt.Errorf("could not load template. Elasticsearch returned: %v. Template is: %s", err, body.StringToPrint())
 	}
 	l.log.Infof("template with name '%s' loaded.", templateName)
@@ -134,11 +134,11 @@ const (
 // loadTemplate loads a template into Elasticsearch overwriting the existing
 // template if it exists. If you wish to not overwrite an existing template
 // then use CheckTemplate prior to calling this method.
-func (l *ESLoader) loadTemplate(templateName string, template map[string]interface{}) error {
+func (l *ESLoader) loadTemplate(templateName string, legacy bool, template map[string]interface{}) error {
 	l.log.Infof("Try loading template %s to Elasticsearch", templateName)
 	params := esVersionParams(l.client.GetVersion())
 	var path string
-	if l.legacyTemplates {
+	if l.useLegacyAPI(legacy) {
 		path = "/_template/" + templateName
 		delete(template, "priority")
 	} else {
@@ -165,11 +165,11 @@ func (l *ESLoader) loadTemplate(templateName string, template map[string]interfa
 
 // templateExists checks if a given template already exist. It returns true if
 // and only if Elasticsearch returns with HTTP status code 200.
-func (l *ESLoader) templateExists(templateName string) bool {
+func (l *ESLoader) templateExists(templateName string, legacy bool) bool {
 	if l.client == nil {
 		return false
 	}
-	if l.legacyTemplates {
+	if l.useLegacyAPI(legacy) {
 		status, body, _ := l.client.Request("GET", "/_cat/templates/"+templateName, "", nil, nil)
 		return status == http.StatusOK && strings.Contains(string(body), templateName)
 	}
@@ -177,6 +177,12 @@ func (l *ESLoader) templateExists(templateName string) bool {
 	return status == http.StatusOK
 }
 
+func (l *ESLoader) useLegacyAPI(legacy bool) bool {
+	fmt.Println(fmt.Sprintf("-- legacy: %v; not supported: %v, overall: %v", legacy, l.legacyAPI, legacy || l.legacyAPI))
+	return legacy || l.legacyAPI
+}
+
+//TODO(simitt): respect `legacy` setting
 // Load reads the template from the config, creates the template body and prints it to the configured file.
 func (l *FileLoader) Load(config TemplateConfig, info beat.Info, fields []byte, migration bool) error {
 	//build template from config
