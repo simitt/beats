@@ -53,6 +53,7 @@ type Template struct {
 	config      TemplateConfig
 	migration   bool
 	order       int
+	priority    int
 }
 
 // New creates a new template instance
@@ -130,6 +131,7 @@ func New(
 		config:      config,
 		migration:   migration,
 		order:       config.Order,
+		priority:    config.Priority,
 	}, nil
 }
 
@@ -187,6 +189,7 @@ func (t *Template) LoadMinimal() (common.MapStr, error) {
 	m := common.MapStr{
 		keyPattern: patterns,
 		"order":    t.order,
+		"priority": t.priority,
 		"settings": common.MapStr{
 			"index": t.config.Settings.Index,
 		},
@@ -217,6 +220,7 @@ func (t *Template) Generate(properties common.MapStr, dynamicTemplates []common.
 	return common.MapStr{
 		keyPattern: patterns,
 		"order":    t.order,
+		"priority": t.priority,
 		"mappings": buildMappings(
 			t.beatVersion, t.esVersion, t.beatName,
 			properties,

@@ -30,12 +30,13 @@ type TemplateConfig struct {
 		Path    string `config:"path"`
 		Name    string `config:"name"`
 	} `config:"json"`
-	AppendFields mapping.Fields   `config:"append_fields"`
-	Overwrite    bool             `config:"overwrite"`
-	Settings     TemplateSettings `config:"settings"`
-	Order        int              `config:"order"`
-	Priority     int              `config:"priority"`
-	Legacy       bool             `config:"legacy"`
+	AppendFields mapping.Fields    `config:"append_fields"`
+	Overwrite    bool              `config:"overwrite"`
+	Settings     TemplateSettings  `config:"settings"`
+	Order        int               `config:"order"`
+	Priority     int               `config:"priority"`
+	Legacy       bool              `config:"legacy"`
+	DataStream   map[string]string `config:"-"`
 }
 
 // TemplateSettings are part of the Elasticsearch template and hold index and source specific information.
@@ -50,7 +51,7 @@ func DefaultConfig() TemplateConfig {
 		Enabled:  true,
 		Fields:   "",
 		Order:    1,
-		Priority: 100,
+		Priority: 150,
 		Legacy:   false,
 	}
 }

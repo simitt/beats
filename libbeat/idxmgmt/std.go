@@ -290,7 +290,7 @@ func (m *indexManager) Setup(loadTemplate, loadILM LoadMode) error {
 			}
 		}
 		fields := m.assets.Fields(m.support.info.Beat)
-		err = m.clientHandler.Load(tmplCfg, m.support.info, fields, m.support.migration)
+		err = m.clientHandler.LoadLegacyTemplate(tmplCfg, m.support.info, fields, m.support.migration)
 		if err != nil {
 			return fmt.Errorf("error loading template: %v", err)
 		}
