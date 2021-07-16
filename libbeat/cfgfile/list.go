@@ -29,6 +29,7 @@ import (
 	"github.com/elastic/beats/v7/libbeat/common/reload"
 	"github.com/elastic/beats/v7/libbeat/logp"
 	"github.com/elastic/beats/v7/libbeat/publisher/pipetool"
+	"github.com/elastic/go-ucfg"
 )
 
 // RunnerList implements a reloadable.List of Runners
@@ -63,7 +64,15 @@ func (r *RunnerList) Reload(configs []*reload.ConfigWithMeta) error {
 	r.logger.Debugf("Starting reload procedure, current runners: %d", len(stopList))
 
 	// diff current & desired state, create action lists
+	r.logger.Info("---SIMITT Config reload")
 	for _, config := range configs {
+		rawCfg := ucfg.Config(*config.Config)
+		m := common.MapStr{}
+		if err := rawCfg.Unpack(m); err != nil {
+			r.logger.Errorf("error unpacking: %s", err.Error())
+			return err
+		}
+		r.logger.Errorf("---SIMITT Config %+v", m.Flatten())
 		hash, err := HashConfig(config.Config)
 		if err != nil {
 			r.logger.Errorf("Unable to hash given config: %s", err)
